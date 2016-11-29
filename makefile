@@ -1,4 +1,4 @@
-C=gcc
+CC=gcc
 CFLAGS=-g -Wall -O2
 LDFLAGS=-L/usr/lib/
 #LIBS=-L/usr/lib/ -lmysqlclient #-lpthread
