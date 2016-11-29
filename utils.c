@@ -4,7 +4,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-char* run_cmd(const char *cmd, int cmd_length, char out_str[], int out_str_size)
+char* run_cmd(const char *cmd,  char out_str[], int out_str_size)
 {
     FILE *fp = 0;
     int index = 0;
@@ -31,6 +31,24 @@ char* run_cmd(const char *cmd, int cmd_length, char out_str[], int out_str_size)
     }
     return out_str;
 }
+
+int send_one_data(const char *server_ip, int server_port, const char *agent_host_name, const char *key_to_send, const char *data)
+{
+  char sender_cmd[1024] = {0};
+  char ret[1024] = {0};
+  sprintf(sender_cmd, "zabbix_sender -z %s -p %d -s \"%s\" -k %s -o %s\n", server_ip, server_port, agent_host_name, key_to_send, data);
+  printf("%s", sender_cmd);
+  run_cmd(sender_cmd, ret, 1024);
+  printf("send ret:%s\n", ret);
+  if (strstr(ret, "failed: 1") != NULL)
+  {
+    perror(ret);
+    printf("error\n");
+    return -1;
+  }
+  return 0;
+}
+
 
 int write_to_send_file(const char *file_name, const char *agent_host_name, char (*item_key)[512], char (*item_data)[64], int item_count)
 {
@@ -62,7 +80,7 @@ void send_file(const char *server_ip, int server_port, const char *file_name)
   char ret[1024] = {0};
   sprintf(sender_cmd, "zabbix_sender -z %s -p %d -i %s\n", server_ip, server_port, file_name);
   printf("%s", sender_cmd);
-  run_cmd(sender_cmd, sizeof(sender_cmd), ret, sizeof(ret));
+  run_cmd(sender_cmd, ret, sizeof(ret));
   printf("send ret:%s\n", ret);
   if (strstr(ret, "failed: 1") != NULL)
   {

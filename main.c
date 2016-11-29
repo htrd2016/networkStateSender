@@ -17,7 +17,7 @@ int get_network_names(char (*names)[512], int *count)
 
   const char *ls_cmd = "ls /sys/class/net/";
   char ls_cmd_ret[512] = {0};
-  run_cmd(ls_cmd, strlen(ls_cmd), ls_cmd_ret, sizeof(ls_cmd_ret));
+  run_cmd(ls_cmd, ls_cmd_ret, sizeof(ls_cmd_ret));
   start = ls_cmd_ret;
 
   while(NULL!=(end=strchr(start, '\n'))&&index<=MAX_COUNT)
@@ -142,7 +142,7 @@ int send_auto_discovery(const char *server_ip, int server_port, const char *agen
   sprintf(cmd, "zabbix_sender -z %s -p %d -s \"%s\" -k %s -o \'{\"data\":[\%s]}\'", server_ip, server_port, agent_host_name, discovery_item_key, array_items);
 
   printf("%s\n", cmd);
-  run_cmd(cmd, sizeof(cmd), cmd_ret, sizeof(cmd_ret));
+  run_cmd(cmd, cmd_ret, sizeof(cmd_ret));
   
   if (strstr(cmd_ret, "failed: 0") == NULL)
   {
@@ -152,33 +152,21 @@ int send_auto_discovery(const char *server_ip, int server_port, const char *agen
   return 0;
 }
 
-int write_network_to_send_file(const char *file_name, const char *agent_host_name, char *item_key, char (*network_names)[512], char (*item_data)[32], int item_count)
+int send_network_to_server(const char *server_ip, int server_port, const char *agent_host_name, char *item_key, char (*network_names)[512], char (*item_data)[32], int item_count)
 {
    int index = 0;
-   FILE *fp = fopen(file_name, "w");
-   if(fp == 0)
-   {
-     perror("write file failed!!!");
-     printf("open file %s failed\n", file_name);
-     return -1;
-   }
+   char key[512] = {0};
    for(index=0; index<item_count; index++)
    {
      if(strlen(item_data[index]) == 0)
      {
        continue;
      }
-     fwrite("\"", 1, 1, fp);
-     fwrite(agent_host_name, strlen(agent_host_name), 1, fp);
-     fwrite("\" ", 2, 1, fp);
-     fwrite(item_key, strlen(item_key), 1, fp);
-     fwrite("[", 1, 1, fp);
-     fwrite(network_names[index], strlen(network_names[index]), 1, fp);
-     fwrite("] ", 2, 1, fp);
-     fwrite(item_data[index], strlen(item_data[index]), 1, fp);
-     fwrite("\n", 1, 1, fp);
+     memset(key, 0, sizeof(key));
+     sprintf(key, "%s[%s]", item_key, network_names[index]);
+
+     send_one_data(server_ip, server_port, agent_host_name, key, item_data[index]);
    }
-   fclose(fp);
    return 0;
 }
 
@@ -189,7 +177,6 @@ int main(int argc, char* argv[])
   char agent_host_name[512] = {0};
   char item_key[512] = {0};
   int send_interval = -1;
-  char temp_file[512] = {0};
   char discovery_item_key[512] = {0};
 
   char network_names[MAX_COUNT][512];
@@ -198,9 +185,9 @@ int main(int argc, char* argv[])
 
   int time = 0;
 
-  if(argc<8)
+  if(argc<7)
   {
-    printf("use<path><server ip><server port><agent host name><auto discovery item key><item key><send data interval><temp file>\n");
+    printf("use<path><server ip><server port><agent host name><auto discovery item key><item key><send data interval>\n");
     return -1;
   }
 
@@ -210,9 +197,8 @@ int main(int argc, char* argv[])
   strcpy(discovery_item_key, argv[4]);  
   strcpy(item_key, argv[5]);
   send_interval = atoi(argv[6]);
-  strcpy(temp_file, argv[7]);
 
-  printf("srever ip:%s,srever port:%d,agent host name:%s,item key:%s,send interval:%d,temp file %s\n", server_ip, server_port, agent_host_name, item_key, send_interval, temp_file);
+  printf("srever ip:%s,srever port:%d,agent host name:%s,item key:%s,send interval:%d\n", server_ip, server_port, agent_host_name, item_key, send_interval);
 
   init_files(files);
   while(1)
@@ -228,20 +214,15 @@ int main(int argc, char* argv[])
       }
       send_auto_discovery(server_ip, server_port, agent_host_name, discovery_item_key, network_names, count);
       
-      for(time=0; time<10; time++)
+      for(time=0; time<5000; time++)
       {
         if(-1 == get_network_state(count, network_state))
         {
            sleep(30);
            break;
         }
-        if(-1 == write_network_to_send_file(temp_file, agent_host_name, item_key, network_names, network_state, count))
-        {
-          perror("write file error!!!\n");
-          sleep(30);
-          continue;
-        }
-        send_file(server_ip, server_port, temp_file);
+        
+        send_network_to_server(server_ip, server_port, agent_host_name, item_key, network_names, network_state, count);
         usleep(send_interval*1000);
       }
     }
